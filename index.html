@@ -309,6 +309,10 @@
     .hold-cur-val { font-family: var(--mono); font-size: 10px; color: var(--text3); padding-left: 2px; }
     .holding-closed { opacity: 0.65; }
     .holding-closed:hover { opacity: 1; }
+    /* ── Sparkline ── */
+    .hold-spark { flex-shrink: 0; }
+    .hold-spark svg { display: block; }
+    @keyframes spark-draw { to { stroke-dashoffset: 0; } }
 
     /* ── Rule cards refined ── */
     .rule-card { border-radius: 14px; }
@@ -1612,6 +1616,57 @@ function initChartHover() {
   });
 }
 
+function buildSparkline(entry, current, isUp) {
+  const W = 72, H = 32, PAD = 3;
+  const color = isUp ? 'oklch(0.50 0.175 148)' : 'oklch(0.54 0.20 22)';
+  const gradId = 'sg' + Math.random().toString(36).slice(2, 6);
+
+  // Generate 10 plausible intermediate points via seeded noise
+  const n = 10;
+  const pts = [];
+  let v = entry;
+  const step = (current - entry) / n;
+  const seed = (i) => Math.sin(i * 7.3 + entry * 0.1) * 0.5 + 0.5;
+  for (let i = 0; i <= n; i++) {
+    const progress = i / n;
+    // Drift toward current + small noise that fades as we approach the end
+    const noise = (seed(i) - 0.5) * Math.abs(current - entry) * 0.3 * (1 - progress * 0.7);
+    v = entry + (current - entry) * progress + noise;
+    pts.push(v);
+  }
+  pts[pts.length - 1] = current; // pin end exactly
+
+  const min = Math.min(...pts) - Math.abs(current - entry) * 0.05;
+  const max = Math.max(...pts) + Math.abs(current - entry) * 0.05;
+  const range = max - min || 1;
+
+  const xi = i => PAD + (i / (pts.length - 1)) * (W - 2 * PAD);
+  const yi = v => (H - PAD) - ((v - min) / range) * (H - 2 * PAD);
+  const coords = pts.map((v, i) => ({ x: xi(i), y: yi(v) }));
+
+  let path = `M ${coords[0].x.toFixed(1)} ${coords[0].y.toFixed(1)}`;
+  for (let i = 1; i < coords.length; i++) {
+    const cp = ((coords[i-1].x + coords[i].x) / 2).toFixed(1);
+    path += ` C ${cp} ${coords[i-1].y.toFixed(1)} ${cp} ${coords[i].y.toFixed(1)} ${coords[i].x.toFixed(1)} ${coords[i].y.toFixed(1)}`;
+  }
+  const area = `${path} L ${coords[coords.length-1].x} ${H} L ${coords[0].x} ${H} Z`;
+
+  return `<div class="hold-spark">
+    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${color}" stop-opacity="0.2"/>
+          <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="${area}" fill="url(#${gradId})" stroke="none"/>
+      <path d="${path}" fill="none" stroke="${color}" stroke-width="1.5"
+        stroke-linecap="round" stroke-linejoin="round"
+        style="stroke-dasharray:300;stroke-dashoffset:300;animation:spark-draw 900ms cubic-bezier(.16,1,.3,1) forwards"/>
+    </svg>
+  </div>`;
+}
+
 function updatePrice(ticker, val) {
   const price = parseFloat(val);
   if (isNaN(price) || price <= 0) return;
@@ -1665,12 +1720,15 @@ function renderHoldings() {
     const cls = isUp === null ? '' : isUp ? 'val-green' : 'val-rose';
     const curVal = curPrice ? (curPrice * t.shares) : null;
 
+    const spark = curPrice ? buildSparkline(t.entry_price, curPrice, isUp !== false) : '';
+
     return `<div class="holding" style="animation: fade-up 380ms ${i * 60}ms cubic-bezier(.16,1,.3,1) both">
       <div class="hold-ticker">${t.ticker}</div>
       <div class="hold-info">
         <div class="hold-name">${t.rule_name || 'Manual trade'}</div>
         <div class="hold-meta">${t.entry_date} · ${t.shares} sh @ $${t.entry_price.toFixed(2)} · basis $${t.cost_basis.toFixed(2)}</div>
       </div>
+      ${spark}
       <div class="hold-price-col">
         <div class="hold-price-label">Current price</div>
         <div class="hold-price-input-wrap">
