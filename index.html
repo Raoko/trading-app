@@ -314,6 +314,25 @@
     .hold-spark svg { display: block; }
     @keyframes spark-draw { to { stroke-dashoffset: 0; } }
 
+    /* ── Trade Advisor ── */
+    .adv-result { animation: fade-up 340ms cubic-bezier(.16,1,.3,1) both; }
+    .adv-verdict { font-size: 13px; font-weight: 600; padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; }
+    .adv-verdict.ok   { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
+    .adv-verdict.warn { background: var(--amber-dim); color: var(--amber2); border: 1px solid var(--amber2); }
+    .adv-verdict.bad  { background: var(--rose-dim);  color: var(--rose);  border: 1px solid var(--rose); }
+    .adv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+    @media (max-width: 700px) { .adv-grid { grid-template-columns: 1fr 1fr; } }
+    .adv-block { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+    .adv-block-label { font-size: 10px; font-family: var(--mono); color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
+    .adv-block-val { font-family: var(--display); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+    .adv-block-sub { font-size: 11px; color: var(--text3); margin-top: 3px; font-family: var(--mono); }
+    .adv-rr-row { display: flex; gap: 20px; padding: 12px 0 4px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+    .adv-rr-item { display: flex; flex-direction: column; gap: 2px; }
+    .adv-rr-label { font-size: 10px; font-family: var(--mono); color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; }
+    .adv-rr-val { font-family: var(--display); font-size: 18px; font-weight: 800; letter-spacing: -0.02em; color: var(--text); }
+    .adv-rule-hint { background: var(--amber-dim); border: 1px solid var(--amber2); border-radius: 10px; padding: 10px 14px; font-size: 12px; color: var(--text2); line-height: 1.5; }
+    .adv-rule-hint strong { color: var(--amber2); }
+
     /* ── Rule cards refined ── */
     .rule-card { border-radius: 14px; }
     .rule-ticker { font-size: 20px; letter-spacing: -0.03em; }
@@ -349,6 +368,9 @@
     <button class="nav-item" onclick="showPage('signals')" id="nav-signals">
       <span class="nav-icon">⚡</span> Signal Check
       <span class="nav-badge" id="signal-badge" style="display:none">0</span>
+    </button>
+    <button class="nav-item" onclick="showPage('advisor')" id="nav-advisor">
+      <span class="nav-icon">🎯</span> Trade Advisor
     </button>
     <div class="sidebar-section">History</div>
     <button class="nav-item" onclick="showPage('journal')" id="nav-journal">
@@ -661,6 +683,102 @@
     </div>
 
     <!-- ════════════════════════════════════
+         PAGE: TRADE ADVISOR
+    ════════════════════════════════════ -->
+    <div class="page" id="page-advisor">
+      <div class="page-header">
+        <div class="page-title">Trade Advisor</div>
+        <div class="page-sub">Size any trade to your capital and risk profile. No guessing.</div>
+      </div>
+
+      <!-- Position Sizer -->
+      <div class="card section-gap">
+        <div class="card-label">Position Sizer</div>
+        <div class="form-grid" style="margin-bottom:16px">
+          <div class="form-group">
+            <label class="form-label">Ticker</label>
+            <input class="form-input" id="adv-ticker" placeholder="NVDA" style="text-transform:uppercase"
+              oninput="this.value=this.value.toUpperCase();advPrefillFromRule()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Entry price ($)</label>
+            <input class="form-input" id="adv-entry" type="number" step="0.01" placeholder="125.00" oninput="calcAdvisor()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Stop loss (%)</label>
+            <input class="form-input" id="adv-stop" type="number" step="0.5" placeholder="8" oninput="calcAdvisor()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Take profit (%)</label>
+            <input class="form-input" id="adv-target" type="number" step="0.5" placeholder="15" oninput="calcAdvisor()">
+          </div>
+        </div>
+
+        <!-- Matched rule hint -->
+        <div id="adv-rule-hint" style="display:none;margin-bottom:14px"></div>
+
+        <!-- Result -->
+        <div id="adv-result" class="adv-result" style="display:none">
+          <div class="adv-verdict" id="adv-verdict"></div>
+          <div class="adv-grid">
+            <div class="adv-block">
+              <div class="adv-block-label">Position size</div>
+              <div class="adv-block-val" id="adv-dollars">—</div>
+              <div class="adv-block-sub" id="adv-pct-of-cap">—</div>
+            </div>
+            <div class="adv-block">
+              <div class="adv-block-label">Shares to buy</div>
+              <div class="adv-block-val" id="adv-shares">—</div>
+              <div class="adv-block-sub">fractional OK in Robinhood</div>
+            </div>
+            <div class="adv-block">
+              <div class="adv-block-label">Stop loss at</div>
+              <div class="adv-block-val val-rose" id="adv-stop-price">—</div>
+              <div class="adv-block-sub" id="adv-stop-loss-amt">—</div>
+            </div>
+            <div class="adv-block">
+              <div class="adv-block-label">Take profit at</div>
+              <div class="adv-block-val val-green" id="adv-target-price">—</div>
+              <div class="adv-block-sub" id="adv-target-gain">—</div>
+            </div>
+          </div>
+          <div class="adv-rr-row">
+            <div class="adv-rr-item">
+              <span class="adv-rr-label">Risk / Reward</span>
+              <span class="adv-rr-val" id="adv-rr">—</span>
+            </div>
+            <div class="adv-rr-item">
+              <span class="adv-rr-label">Max loss</span>
+              <span class="adv-rr-val val-rose" id="adv-max-loss">—</span>
+            </div>
+            <div class="adv-rr-item">
+              <span class="adv-rr-label">% of portfolio</span>
+              <span class="adv-rr-val" id="adv-port-pct">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="adv-placeholder" class="empty-state" style="padding:32px 0">
+          <div class="empty-icon">🎯</div>
+          <div class="empty-title">Enter a ticker and price</div>
+          <div class="empty-sub">The sizer will calculate exact position size, stop, and target<br>based on your current risk profile and available capital.</div>
+        </div>
+      </div>
+
+      <!-- Quick-fill from open positions -->
+      <div class="card section-gap" id="adv-open-card" style="display:none">
+        <div class="card-label">Open positions — add to or size a close</div>
+        <div id="adv-open-chips" class="sig-chip-row"></div>
+      </div>
+
+      <!-- Active rules for this ticker -->
+      <div class="card" id="adv-rules-card" style="display:none">
+        <div class="card-label">Rules for <span id="adv-rules-ticker">—</span></div>
+        <div id="adv-rules-list"></div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
          PAGE: TRADE JOURNAL
     ════════════════════════════════════ -->
     <div class="page" id="page-journal">
@@ -892,6 +1010,7 @@ function init() {
   renderJournal();
   renderPerformance();
   renderPortfolio();
+  renderAdvisor();
   loadSettingsUI();
   populateRuleDropdown();
   setEntryDate();
@@ -975,6 +1094,7 @@ function showPage(id) {
   if (id === 'performance') renderPerformance();
   if (id === 'portfolio') renderPortfolio();
   if (id === 'signals') renderSignalPositions();
+  if (id === 'advisor') renderAdvisor();
 }
 
 // ── Capital Gate ───────────────────────────────────────
@@ -1445,6 +1565,123 @@ function clearAllData() {
   ['trading_profile','trading_rules','trading_journal','trading_profile'].forEach(k => localStorage.removeItem(k));
   STATE.rules = []; STATE.journal = [];
   location.reload();
+}
+
+// ── Trade Advisor ───────────────────────────────────────
+function renderAdvisor() {
+  // Populate open-position chips
+  const open = STATE.journal.filter(t => !t.exit_date);
+  const openCard = document.getElementById('adv-open-card');
+  const openChips = document.getElementById('adv-open-chips');
+  if (open.length && openCard && openChips) {
+    const seen = new Set();
+    const tickers = open.filter(t => !seen.has(t.ticker) && seen.add(t.ticker));
+    openChips.innerHTML = tickers.map(t => {
+      const cur = STATE.prices[t.ticker];
+      const unrl = cur ? ((cur - t.entry_price) * t.shares) : null;
+      const isUp = unrl === null ? null : unrl >= 0;
+      const pnlStr = unrl !== null
+        ? `<span class="sig-chip-pnl" style="color:${isUp ? 'var(--green)' : 'var(--rose)'}">${isUp ? '+' : ''}$${unrl.toFixed(2)}</span>`
+        : '';
+      return `<button class="sig-chip" onclick="advPrefill('${t.ticker}',${cur || t.entry_price},${t.entry_price})">
+        <span class="sig-chip-ticker">${t.ticker}</span>${pnlStr}</button>`;
+    }).join('');
+    openCard.style.display = 'block';
+  } else if (openCard) { openCard.style.display = 'none'; }
+}
+
+function advPrefill(ticker, price, entry) {
+  document.getElementById('adv-ticker').value = ticker;
+  document.getElementById('adv-entry').value = price;
+  advPrefillFromRule();
+  calcAdvisor();
+}
+
+function advPrefillFromRule() {
+  const ticker = document.getElementById('adv-ticker').value.toUpperCase().trim();
+  if (!ticker) return;
+  // Find matching active rules
+  const matched = STATE.rules.filter(r => r.active && (r.ticker === ticker || r.ticker === 'MARKET'));
+  const hint = document.getElementById('adv-rule-hint');
+  if (matched.length && hint) {
+    const r = matched[0];
+    // Pre-fill stop/target from first matched rule
+    if (r.stop_loss_pct) document.getElementById('adv-stop').value = r.stop_loss_pct;
+    if (r.take_profit_pct) document.getElementById('adv-target').value = r.take_profit_pct;
+    hint.style.display = 'block';
+    hint.className = 'adv-rule-hint';
+    hint.innerHTML = `<strong>Rule matched:</strong> "${r.name}" — ${r.type.replace('_',' ')} → ${r.action.replace('_',' ')}
+      ${r.notes ? `<br><em>${r.notes}</em>` : ''}`;
+  } else if (hint) { hint.style.display = 'none'; }
+
+  // Show rules card
+  const rulesCard = document.getElementById('adv-rules-card');
+  const rulesList = document.getElementById('adv-rules-list');
+  const rulesTicker = document.getElementById('adv-rules-ticker');
+  if (rulesCard && rulesList && ticker) {
+    const tickerRules = STATE.rules.filter(r => r.ticker === ticker || r.ticker === 'MARKET');
+    if (tickerRules.length) {
+      rulesTicker.textContent = ticker;
+      rulesList.innerHTML = tickerRules.map(r => `
+        <div class="calc-row">
+          <span class="calc-label">${r.name} <span style="opacity:0.5">(${r.type.replace('_',' ')})</span></span>
+          <span class="calc-val">${actionTag(r.action)}</span>
+        </div>`).join('');
+      rulesCard.style.display = 'block';
+    } else { rulesCard.style.display = 'none'; }
+  }
+  calcAdvisor();
+}
+
+function calcAdvisor() {
+  const ticker  = document.getElementById('adv-ticker').value.toUpperCase().trim();
+  const entry   = parseFloat(document.getElementById('adv-entry').value);
+  const stopPct = parseFloat(document.getElementById('adv-stop').value);
+  const tgtPct  = parseFloat(document.getElementById('adv-target').value);
+  const result  = document.getElementById('adv-result');
+  const placeholder = document.getElementById('adv-placeholder');
+
+  if (!ticker || isNaN(entry) || entry <= 0) {
+    result.style.display = 'none'; placeholder.style.display = 'block'; return;
+  }
+
+  const riskPct  = getMaxRiskPct();   // 2 / 5 / 10 per profile
+  const available = Math.max(0, STATE.balance - STATE.deployed);
+  const dollars  = available * (riskPct / 100);
+  const shares   = dollars / entry;
+
+  const stopPrice   = isNaN(stopPct)  ? null : entry * (1 - stopPct / 100);
+  const targetPrice = isNaN(tgtPct)   ? null : entry * (1 + tgtPct / 100);
+  const maxLoss     = stopPrice ? (entry - stopPrice) * shares : null;
+  const maxGain     = targetPrice ? (targetPrice - entry) * shares : null;
+  const rr          = maxLoss && maxGain ? (maxGain / maxLoss) : null;
+  const portPct     = STATE.balance ? (dollars / STATE.balance * 100) : null;
+
+  // Verdict
+  let verdictCls = 'ok', verdictText = '✓ This trade fits your risk profile.';
+  if (STATE.debtFlag && STATE.riskProfile === 'aggressive') {
+    verdictCls = 'bad'; verdictText = '✕ Aggressive mode blocked — debt flag active. Pay down debt first.';
+  } else if (STATE.eFund === 0 && dollars > 200) {
+    verdictCls = 'warn'; verdictText = '⚠ No emergency fund. Capping suggestion at $200 until you have 1 month saved.';
+  } else if (rr !== null && rr < 1) {
+    verdictCls = 'warn'; verdictText = `⚠ Risk/reward is below 1:1 (${rr.toFixed(2)}:1). Consider tightening the stop or widening the target.`;
+  }
+
+  document.getElementById('adv-verdict').textContent = verdictText;
+  document.getElementById('adv-verdict').className = 'adv-verdict ' + verdictCls;
+  document.getElementById('adv-dollars').textContent = '$' + dollars.toFixed(2);
+  document.getElementById('adv-pct-of-cap').textContent = riskPct + '% of $' + available.toFixed(0) + ' available';
+  document.getElementById('adv-shares').textContent = shares.toFixed(4);
+  document.getElementById('adv-stop-price').textContent = stopPrice ? '$' + stopPrice.toFixed(2) : '—';
+  document.getElementById('adv-stop-loss-amt').textContent = maxLoss ? `-$${maxLoss.toFixed(2)} if hit` : 'set stop % above';
+  document.getElementById('adv-target-price').textContent = targetPrice ? '$' + targetPrice.toFixed(2) : '—';
+  document.getElementById('adv-target-gain').textContent = maxGain ? `+$${maxGain.toFixed(2)} if hit` : 'set target % above';
+  document.getElementById('adv-rr').textContent = rr ? '1 : ' + rr.toFixed(2) : '—';
+  document.getElementById('adv-max-loss').textContent = maxLoss ? '-$' + maxLoss.toFixed(2) : '—';
+  document.getElementById('adv-port-pct').textContent = portPct ? portPct.toFixed(1) + '%' : '—';
+
+  placeholder.style.display = 'none';
+  result.style.display = 'block';
 }
 
 // ── Portfolio Chart ─────────────────────────────────────
